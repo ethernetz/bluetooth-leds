@@ -17,12 +17,24 @@ CRGB leds[NUM_LEDS];
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define HUE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define BRIGHTNESS_CHARACTERISTIC_UUID "04cc261b-5870-4abc-9f08-ab1ab4b90d6e"
+#define MODE_CHARACTERISTIC_UUID "0db05672-2268-4018-9662-255dc67c3473"
+
+// Define modes
+enum Mode
+{
+  MODE_SOLID,
+  MODE_TWINKLE,
+  MODE_MOVE,
+  // Add more modes here
+};
 
 // Global variables
 BluetoothA2DPSink a2dp_sink;
 BLECharacteristic *pHueCharacteristic;
 BLECharacteristic *pBrightnessCharacteristic;
+BLECharacteristic *pModeCharacteristic;
 int globalHueValue = 0;
+Mode globalModeValue = MODE_MOVE;
 
 // Callbacks
 void data_received_callback()
@@ -86,6 +98,34 @@ class BrightnessCharacteristicCallbacks : public BLECharacteristicCallbacks
   }
 };
 
+class ModeCharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+  void onWrite(BLECharacteristic *pCharacteristic) override
+  {
+    // Get the value from the characteristic
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() > 0)
+    {
+      // Convert the first byte of the value to an int and cast to Mode
+      Mode newModeValue = static_cast<Mode>(value[0]);
+
+      // If the mode has changed, clear all LEDs
+      if (newModeValue != globalModeValue)
+      {
+        fill_solid(leds, NUM_LEDS, CRGB::Black);
+      }
+
+      // Update the global mode value
+      globalModeValue = newModeValue;
+
+      // Print the new mode value
+      Serial.print("New mode value: ");
+      Serial.println(static_cast<int>(globalModeValue));
+    }
+  }
+};
+
 // Setup function
 void setup()
 {
@@ -103,6 +143,9 @@ void setup()
   pBrightnessCharacteristic = pService->createCharacteristic(
       BRIGHTNESS_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE_NR);
   pBrightnessCharacteristic->setCallbacks(new BrightnessCharacteristicCallbacks());
+  pModeCharacteristic = pService->createCharacteristic(
+      MODE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE_NR);
+  pModeCharacteristic->setCallbacks(new ModeCharacteristicCallbacks());
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
@@ -130,21 +173,16 @@ void setup()
   FastLED.setBrightness(STARTING_BRIGHTNESS);
 }
 
-// Define modes
-enum Mode
+// Solid mode function
+void solidMode()
 {
-  MODE_TWINKLE,
-  MODE_MOVE,
-  // Add more modes here
-};
-
-// Current mode
-Mode currentMode = MODE_MOVE;
+  fill_solid(leds, NUM_LEDS, CHSV(globalHueValue, 255, 255));
+}
 
 // Twinkle mode function
 void twinkleMode()
 {
-  static uint8_t nextLed = 0;
+  static uint16_t nextLed = 0; // Changed from uint8_t to uint16_t
 
   // Every 13.3 milliseconds, turn on a new LED
   EVERY_N_MILLISECONDS(13)
@@ -190,8 +228,11 @@ void moveMode()
 // Main loop
 void loop()
 {
-  switch (currentMode)
+  switch (globalModeValue)
   {
+  case MODE_SOLID:
+    solidMode();
+    break;
   case MODE_TWINKLE:
     twinkleMode();
     break;
