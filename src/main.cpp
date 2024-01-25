@@ -130,12 +130,75 @@ void setup()
   FastLED.setBrightness(STARTING_BRIGHTNESS);
 }
 
+// Define modes
+enum Mode
+{
+  MODE_TWINKLE,
+  MODE_MOVE,
+  // Add more modes here
+};
+
+// Current mode
+Mode currentMode = MODE_MOVE;
+
+// Twinkle mode function
+void twinkleMode()
+{
+  static uint8_t nextLed = 0;
+
+  // Every 13.3 milliseconds, turn on a new LED
+  EVERY_N_MILLISECONDS(13)
+  {
+    // Find a random LED that is off
+    do
+    {
+      nextLed = random(NUM_LEDS);
+    } while (leds[nextLed] != CRGB::Black);
+
+    // Turn on the LED
+    leds[nextLed] = CHSV(globalHueValue, 255, 255);
+  }
+
+  // Gradually fade out all LEDs over 2 seconds
+  fadeToBlackBy(leds, NUM_LEDS, 2);
+}
+
+// Move mode function
+void moveMode()
+{
+  static int pos = 0;
+
+  // Gradually fade all LEDs
+  fadeToBlackBy(leds, NUM_LEDS, 10);
+
+  // Create strings of 7 LEDs spaced 8 LEDs apart
+  for (int i = pos; i < NUM_LEDS; i += 15)
+  {
+    for (int j = i; j < i + 7; j++)
+    {
+      leds[j % NUM_LEDS] = CHSV(globalHueValue, 255, 255);
+    }
+  }
+
+  // Move the position every second
+  EVERY_N_SECONDS(1)
+  {
+    pos = (pos + 1) % 15; // Move the position
+  }
+}
+
 // Main loop
 void loop()
 {
-  for (int i = 0; i < NUM_LEDS; i++)
+  switch (currentMode)
   {
-    leds[i] = CHSV(globalHueValue, 255, 255);
+  case MODE_TWINKLE:
+    twinkleMode();
+    break;
+  case MODE_MOVE:
+    moveMode();
+    break;
+    // Add more cases here for additional modes
   }
   FastLED.show();
 }
