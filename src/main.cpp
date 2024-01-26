@@ -145,9 +145,8 @@ void renderFFT(void *parameter)
 
       for (byte band = 0; band < NUM_BANDS; band++)
       {
-        intensity[band] = map(peak[band], 1, amplitude, 0, 8);
-        // Serial.print(intensity[band]);
-        // Serial.print(" | ");
+        intensity[band] = map(peak[band], 0, amplitude, 0, 64);
+        // Serial.printf("%3d | ", intensity[band]); // prints the intensity value with a width of 3
       }
 
       // Serial.println("");
@@ -310,6 +309,22 @@ void solidMode()
   fill_solid(leds, NUM_LEDS, CHSV(globalHueValue, 255, 255));
 }
 
+uint8_t calculateWeightedIntensity(const uint8_t weights[])
+{
+  uint8_t weightedTotal = 0;
+  uint8_t totalWeights = 0; // To store the sum of all weights
+
+  for (int i = 0; i < NUM_BANDS; i++)
+  {
+    weightedTotal += intensity[i] * weights[i];
+    totalWeights += weights[i]; // Add each weight to the total
+  }
+
+  // Calculate the weighted average using the total of weights
+  uint8_t weightedAverage = weightedTotal / totalWeights;
+  return weightedAverage;
+}
+
 // Twinkle mode function
 void twinkleMode()
 {
@@ -332,42 +347,26 @@ void twinkleMode()
   fadeToBlackBy(leds, NUM_LEDS, 2);
 }
 
-uint8_t calculateIntensity(uint8_t intensity[], const uint8_t weights[], int numBands)
+uint8_t calculateMothershipLength(const uint8_t weights[])
 {
-  uint8_t weightedTotal = 0;
-  uint8_t totalWeights = 0; // To store the sum of all weights
+  // Calculate the weighted average of the intensity
+  uint8_t weightedAverage = calculateWeightedIntensity(weights);
+  Serial.print("Weighted average: ");
+  Serial.println(weightedAverage);
 
-  for (int i = 0; i < numBands; i++)
+  if (weightedAverage > 12)
   {
-    weightedTotal += intensity[i] * weights[i];
-    totalWeights += weights[i]; // Add each weight to the total
+    Serial.println("Weighted average is greater than 12");
+    return 10;
   }
-
-  // Calculate the weighted average using the total of weights
-  uint8_t weightedAverage;
-  if (totalWeights > 0)
+  else if (weightedAverage > 7)
   {
-    weightedAverage = weightedTotal / totalWeights;
+    return map(weightedAverage, 7, 12, 2, 7);
   }
   else
   {
-    weightedAverage = 0; // To handle the case where totalWeights is 0
+    return 1;
   }
-
-  // Map the weighted average to the 1-7 scale
-  int overallIntensity = map(weightedAverage, 0, 8, -2, 18);
-
-  // Ensure the overallIntensity stays within the 1-7 range
-  if (overallIntensity > 13)
-  {
-    overallIntensity = 13;
-  }
-  else if (overallIntensity < 1)
-  {
-    overallIntensity = 1;
-  }
-
-  return overallIntensity;
 }
 
 // Move mode function
@@ -380,24 +379,25 @@ void moveMode()
   if (a2dp_sink.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED)
   {
     const uint8_t evenWeights[NUM_BANDS] = {2, 4, 1, 1, 1, 4, 4, 4};
-    mothershipEvenSideLength = calculateIntensity(intensity, evenWeights, NUM_BANDS);
+    mothershipEvenSideLength = calculateMothershipLength(evenWeights);
 
     const uint8_t oddWeights[NUM_BANDS] = {4, 1, 1, 4, 1, 1, 4, 4};
-    mothershipOddSideLength = calculateIntensity(intensity, oddWeights, NUM_BANDS);
+    mothershipOddSideLength = calculateMothershipLength(oddWeights);
 
     if (mothershipEvenSideLength + mothershipOddSideLength >= 14)
     {
       pos += 7;
     }
+    fadeToBlackBy(leds, NUM_LEDS, 20);
   }
   else
   {
     mothershipEvenSideLength = 3;
     mothershipOddSideLength = 3;
+    fadeToBlackBy(leds, NUM_LEDS, 15);
   }
 
   // Gradually fade all LEDs
-  fadeToBlackBy(leds, NUM_LEDS, 15);
 
   // Create strings of mothershipLength LEDs every 15 LEDs
   for (int i = pos, count = 0; i < NUM_LEDS; i += 15, count++)
