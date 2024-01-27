@@ -19,10 +19,12 @@ CRGB leds[NUM_LEDS];
 #define HUE_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define BRIGHTNESS_CHARACTERISTIC_UUID "04cc261b-5870-4abc-9f08-ab1ab4b90d6e"
 #define MODE_CHARACTERISTIC_UUID "0db05672-2268-4018-9662-255dc67c3473"
+#define COLOR_MODE_CHARACTERISTIC_UUID "608cfac4-8f9c-4207-88f5-c4a3aec564cf"
 BluetoothA2DPSink a2dp_sink;
 BLECharacteristic *pHueCharacteristic;
 BLECharacteristic *pBrightnessCharacteristic;
 BLECharacteristic *pModeCharacteristic;
+BLECharacteristic *pColorModeCharacteristic;
 
 // FFT
 #define NUM_BANDS 8
@@ -48,8 +50,15 @@ enum Mode
   MODE_MOVE,
   // Add more modes here
 };
+enum ColorMode
+{
+  MODE_PICK,
+  MODE_CYCLE,
+  // Add more modes here
+};
 int globalHueValue = 0;
 Mode globalModeValue = MODE_MOVE;
+ColorMode colorModeValue = MODE_CYCLE;
 
 void audio_data_callback(const uint8_t *data, uint32_t length)
 {
@@ -238,6 +247,28 @@ class ModeCharacteristicCallbacks : public BLECharacteristicCallbacks
   }
 };
 
+class ColorModeCharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+  void onWrite(BLECharacteristic *pCharacteristic) override
+  {
+    // Get the value from the characteristic
+    std::string value = pCharacteristic->getValue();
+
+    if (value.length() > 0)
+    {
+      // Convert the first byte of the value to an int and cast to Mode
+      ColorMode newColorModeValue = static_cast<ColorMode>(value[0]);
+
+      // Update the global mode value
+      colorModeValue = newColorModeValue;
+
+      // Print the new mode value
+      Serial.print("New color mode value: ");
+      Serial.println(static_cast<int>(colorModeValue));
+    }
+  }
+};
+
 // Setup function
 void setup()
 {
@@ -274,6 +305,9 @@ void setup()
   pModeCharacteristic = pService->createCharacteristic(
       MODE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE_NR);
   pModeCharacteristic->setCallbacks(new ModeCharacteristicCallbacks());
+  pColorModeCharacteristic = pService->createCharacteristic(
+      COLOR_MODE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE_NR);
+  pColorModeCharacteristic->setCallbacks(new ColorModeCharacteristicCallbacks());
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
@@ -330,16 +364,21 @@ void twinkleMode()
 {
   static uint16_t nextLed = 0; // Changed from uint8_t to uint16_t
 
-  // Every 13.3 milliseconds, turn on a new LED
-  EVERY_N_MILLISECONDS(13)
+  int numToTwinkle;
+  if (a2dp_sink.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED)
   {
-    // Find a random LED that is off
-    do
-    {
-      nextLed = random(NUM_LEDS);
-    } while (leds[nextLed] != CRGB::Black);
+    const uint8_t evenWeights[NUM_BANDS] = {2, 4, 1, 1, 1, 4, 4, 4};
+    int weightedIntensity = calculateWeightedIntensity(evenWeights);
+    numToTwinkle = 1;
+  }
+  else
+  {
+    numToTwinkle = 1;
+  }
 
-    // Turn on the LED
+  for (int i = 0; i < numToTwinkle; i++)
+  {
+    nextLed = random(NUM_LEDS);
     leds[nextLed] = CHSV(globalHueValue, 255, 255);
   }
 
@@ -351,12 +390,8 @@ uint8_t calculateMothershipLength(const uint8_t weights[])
 {
   // Calculate the weighted average of the intensity
   uint8_t weightedAverage = calculateWeightedIntensity(weights);
-  Serial.print("Weighted average: ");
-  Serial.println(weightedAverage);
-
   if (weightedAverage > 12)
   {
-    Serial.println("Weighted average is greater than 12");
     return 10;
   }
   else if (weightedAverage > 7)
@@ -455,5 +490,14 @@ void loop()
     break;
     // Add more cases here for additional modes
   }
+
+  EVERY_N_MILLISECONDS(100)
+  {
+    if (colorModeValue == MODE_CYCLE)
+    {
+      globalHueValue = (globalHueValue + 1) % 256;
+    }
+  }
+
   FastLED.show();
 }
