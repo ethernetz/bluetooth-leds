@@ -61,6 +61,18 @@ int globalHueValue = 0;
 Mode globalModeValue = MODE_TWINKLE;
 ColorMode colorModeValue = MODE_CYCLE;
 
+int getHueForLED(int ledIndex)
+{
+  if (colorModeValue == MODE_RAINBOW)
+  {
+    return (globalHueValue + map(ledIndex, 0, NUM_LEDS - 1, 0, 255)) % 256;
+  }
+  else
+  {
+    return globalHueValue;
+  }
+}
+
 void audio_data_callback(const uint8_t *data, uint32_t length)
 {
   int item = 0;
@@ -341,7 +353,10 @@ void setup()
 // Solid mode function
 void solidMode()
 {
-  fill_solid(leds, NUM_LEDS, CHSV(globalHueValue, 255, 255));
+  for (int i = 0; i < NUM_LEDS; i++)
+  {
+    leds[i] = CHSV(getHueForLED(i), 255, 255);
+  }
 }
 
 uint8_t calculateWeightedIntensity(const uint8_t weights[])
@@ -399,7 +414,7 @@ void twinkleMode()
     if (random(10) == 0)
     {
       nextLed = random(NUM_LEDS);
-      leds[nextLed] = CHSV(globalHueValue, 255, 255);
+      leds[nextLed] = CHSV(getHueForLED(nextLed), 255, 255);
     }
   }
 }
@@ -465,7 +480,7 @@ void moveMode()
         correctedIndex += NUM_LEDS; // Adjust for negative indices
       }
       correctedIndex %= NUM_LEDS;
-      leds[correctedIndex] = CHSV(globalHueValue, 255, 255);
+      leds[correctedIndex] = CHSV(getHueForLED(correctedIndex), 255, 255);
     }
   }
 
@@ -511,7 +526,7 @@ void loop()
 
   EVERY_N_MILLISECONDS(100)
   {
-    if (colorModeValue == MODE_CYCLE)
+    if (colorModeValue == MODE_CYCLE || colorModeValue == MODE_RAINBOW)
     {
       globalHueValue = (globalHueValue + 1) % 256;
     }
