@@ -8,7 +8,7 @@
 
 // LED configuration
 #define LED_PIN 27
-#define NUM_LEDS 300
+#define NUM_LEDS 600
 #define STARTING_BRIGHTNESS 20
 #define LED_TYPE WS2812B
 #define COLOR_ORDER GRB
@@ -54,10 +54,11 @@ enum ColorMode
 {
   MODE_PICK,
   MODE_CYCLE,
+  MODE_RAINBOW,
   // Add more modes here
 };
 int globalHueValue = 0;
-Mode globalModeValue = MODE_MOVE;
+Mode globalModeValue = MODE_TWINKLE;
 ColorMode colorModeValue = MODE_CYCLE;
 
 void audio_data_callback(const uint8_t *data, uint32_t length)
@@ -367,23 +368,40 @@ void twinkleMode()
   int numToTwinkle;
   if (a2dp_sink.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED)
   {
-    const uint8_t evenWeights[NUM_BANDS] = {2, 4, 1, 1, 1, 4, 4, 4};
-    int weightedIntensity = calculateWeightedIntensity(evenWeights);
-    numToTwinkle = 1;
+    const uint8_t weigths[NUM_BANDS] = {2, 4, 1, 1, 1, 4, 4, 4};
+    int weightedIntensity = calculateWeightedIntensity(weigths);
+    if (weightedIntensity >= 12)
+    {
+      numToTwinkle = 1200;
+    }
+    else if (weightedIntensity >= 6)
+    {
+      numToTwinkle = map(weightedIntensity, 6, 11, 100, 800);
+    }
+    else if (weightedIntensity >= 3)
+    {
+      numToTwinkle = map(weightedIntensity, 3, 5, 5, 20);
+    }
+    else
+    {
+      numToTwinkle = 1;
+    }
+    fadeToBlackBy(leds, NUM_LEDS, 15);
   }
   else
   {
-    numToTwinkle = 1;
+    numToTwinkle = 10;
+    fadeToBlackBy(leds, NUM_LEDS, 5);
   }
 
   for (int i = 0; i < numToTwinkle; i++)
   {
-    nextLed = random(NUM_LEDS);
-    leds[nextLed] = CHSV(globalHueValue, 255, 255);
+    if (random(10) == 0)
+    {
+      nextLed = random(NUM_LEDS);
+      leds[nextLed] = CHSV(globalHueValue, 255, 255);
+    }
   }
-
-  // Gradually fade out all LEDs over 2 seconds
-  fadeToBlackBy(leds, NUM_LEDS, 2);
 }
 
 uint8_t calculateMothershipLength(const uint8_t weights[])
