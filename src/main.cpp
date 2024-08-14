@@ -5,6 +5,7 @@
 #include <BLEUtils.h>
 #include "BluetoothA2DPSink.h"
 #include <arduinoFFT.h>
+#include "IntensityCalculator.h"
 
 // LED configuration
 #define LED_PIN 27
@@ -40,7 +41,7 @@ int16_t sample_l_int;
 int16_t sample_r_int;
 float amplitude = 600;
 QueueHandle_t queue;
-uint8_t intensity[NUM_BANDS];
+IntensityCalculator intensityCalculator;
 
 // Modes
 enum Mode
@@ -150,28 +151,9 @@ void renderFFT(void *parameter)
       FFT.Compute(vReal, vImag, SAMPLES, FFT_FORWARD);
       FFT.ComplexToMagnitude(vReal, vImag, SAMPLES);
 
-      for (uint8_t band = 0; band < NUM_BANDS; band++)
-      {
-        peak[band] = 0;
-      }
-
-      for (int i = 2; i < (SAMPLES / 2); i++)
-      {
-        if (vReal[i] > 2000)
-        {
-          createBands(i, (int)vReal[i] / amplitude);
-        }
-      }
+      intensityCalculator.updateIntensity(vReal, SAMPLES, amplitude);
 
       xQueueReceive(queue, &item, 0);
-
-      for (byte band = 0; band < NUM_BANDS; band++)
-      {
-        intensity[band] = map(peak[band], 0, amplitude, 0, 64);
-        // Serial.printf("%3d | ", intensity[band]); // prints the intensity value with a width of 3
-      }
-
-      // Serial.println("");
     }
   }
 }
@@ -359,48 +341,15 @@ void solidMode()
   }
 }
 
-uint8_t calculateWeightedIntensity(const uint8_t weights[])
-{
-  uint8_t weightedTotal = 0;
-  uint8_t totalWeights = 0; // To store the sum of all weights
-
-  for (int i = 0; i < NUM_BANDS; i++)
-  {
-    weightedTotal += intensity[i] * weights[i];
-    totalWeights += weights[i]; // Add each weight to the total
-  }
-
-  // Calculate the weighted average using the total of weights
-  uint8_t weightedAverage = weightedTotal / totalWeights;
-  return weightedAverage;
-}
-
 // Twinkle mode function
 void twinkleMode()
 {
-  static uint16_t nextLed = 0; // Changed from uint8_t to uint16_t
+  static uint16_t nextLed = 0;
 
   int numToTwinkle;
   if (a2dp_sink.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED)
   {
-    const uint8_t weigths[NUM_BANDS] = {2, 4, 1, 1, 1, 4, 4, 4};
-    int weightedIntensity = calculateWeightedIntensity(weigths);
-    if (weightedIntensity >= 12)
-    {
-      numToTwinkle = 1200;
-    }
-    else if (weightedIntensity >= 6)
-    {
-      numToTwinkle = map(weightedIntensity, 6, 11, 100, 800);
-    }
-    else if (weightedIntensity >= 3)
-    {
-      numToTwinkle = map(weightedIntensity, 3, 5, 5, 20);
-    }
-    else
-    {
-      numToTwinkle = 1;
-    }
+    numToTwinkle = intensityCalculator.getNumToTwinkle();
     fadeToBlackBy(leds, NUM_LEDS, 15);
   }
   else
@@ -419,38 +368,20 @@ void twinkleMode()
   }
 }
 
-uint8_t calculateMothershipLength(const uint8_t weights[])
-{
-  // Calculate the weighted average of the intensity
-  uint8_t weightedAverage = calculateWeightedIntensity(weights);
-  if (weightedAverage > 12)
-  {
-    return 10;
-  }
-  else if (weightedAverage > 7)
-  {
-    return map(weightedAverage, 7, 12, 2, 7);
-  }
-  else
-  {
-    return 1;
-  }
-}
-
 // Move mode function
 void moveMode()
 {
   static int pos = 0;
-  static bool direction = true; // true for forward, false for backward
+  static bool direction = true;
   int mothershipEvenSideLength;
   int mothershipOddSideLength;
   if (a2dp_sink.get_audio_state() == ESP_A2D_AUDIO_STATE_STARTED)
   {
     const uint8_t evenWeights[NUM_BANDS] = {2, 4, 1, 1, 1, 4, 4, 4};
-    mothershipEvenSideLength = calculateMothershipLength(evenWeights);
+    mothershipEvenSideLength = intensityCalculator.getMothershipLength(evenWeights);
 
     const uint8_t oddWeights[NUM_BANDS] = {4, 1, 1, 4, 1, 1, 4, 4};
-    mothershipOddSideLength = calculateMothershipLength(oddWeights);
+    mothershipOddSideLength = intensityCalculator.getMothershipLength(oddWeights);
 
     if (mothershipEvenSideLength + mothershipOddSideLength >= 14)
     {
