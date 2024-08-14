@@ -21,11 +21,13 @@ CRGB leds[NUM_LEDS];
 #define BRIGHTNESS_CHARACTERISTIC_UUID "04cc261b-5870-4abc-9f08-ab1ab4b90d6e"
 #define MODE_CHARACTERISTIC_UUID "0db05672-2268-4018-9662-255dc67c3473"
 #define COLOR_MODE_CHARACTERISTIC_UUID "608cfac4-8f9c-4207-88f5-c4a3aec564cf"
+#define SENSITIVITY_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a9"
 BluetoothA2DPSink a2dp_sink;
 BLECharacteristic *pHueCharacteristic;
 BLECharacteristic *pBrightnessCharacteristic;
 BLECharacteristic *pModeCharacteristic;
 BLECharacteristic *pColorModeCharacteristic;
+BLECharacteristic *pSensitivityCharacteristic;
 
 // FFT
 #define NUM_BANDS 8
@@ -264,6 +266,21 @@ class ColorModeCharacteristicCallbacks : public BLECharacteristicCallbacks
   }
 };
 
+class SensitivityCharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+  void onWrite(BLECharacteristic *pCharacteristic) override
+  {
+    std::string value = pCharacteristic->getValue();
+    if (value.length() > 0)
+    {
+      float newSensitivity = atof(value.c_str());
+      intensityCalculator.setSensitivity(newSensitivity);
+      Serial.print("New sensitivity value: ");
+      Serial.println(newSensitivity);
+    }
+  }
+};
+
 // Setup function
 void setup()
 {
@@ -287,7 +304,7 @@ void setup()
   );
 
   // Initialize BLE Device
-  BLEDevice::init("Elephant controller");
+  BLEDevice::init("Ethan's room");
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -303,6 +320,9 @@ void setup()
   pColorModeCharacteristic = pService->createCharacteristic(
       COLOR_MODE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE_NR);
   pColorModeCharacteristic->setCallbacks(new ColorModeCharacteristicCallbacks());
+  pSensitivityCharacteristic = pService->createCharacteristic(
+      SENSITIVITY_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE_NR);
+  pSensitivityCharacteristic->setCallbacks(new SensitivityCharacteristicCallbacks());
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);

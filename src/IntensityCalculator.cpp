@@ -1,7 +1,7 @@
 // IntensityCalculator.cpp
 #include "IntensityCalculator.h"
 
-IntensityCalculator::IntensityCalculator() : amplitude(600)
+IntensityCalculator::IntensityCalculator() : amplitude(600), sensitivity(0.2)
 {
     memset(intensity, 0, sizeof(intensity));
     memset(peak, 0, sizeof(peak));
@@ -38,7 +38,7 @@ void IntensityCalculator::updateIntensity(double vReal[], int samples, float new
             else
                 band = 7;
 
-            int dsize = (int)vReal[i] / amplitude;
+            int dsize = (int)(vReal[i] * sensitivity / amplitude);
             if (dsize > peak[band])
             {
                 peak[band] = dsize;
@@ -108,4 +108,13 @@ int IntensityCalculator::getNumToTwinkle()
     {
         return 1;
     }
+}
+void IntensityCalculator::setSensitivity(float newSensitivity)
+{
+    sensitivity = constrain(newSensitivity, 0.1, 10.0); // Limit sensitivity range
+}
+
+float IntensityCalculator::getSensitivity()
+{
+    return sensitivity;
 }
